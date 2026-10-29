@@ -13,26 +13,28 @@ new active version.
 | Path | Purpose |
 | --- | --- |
 | `app/main.py` | FastAPI: submit a contact, inspect contacts, versions, optimizations, stats |
-| `app/workflows/email.py` | Per-contact workflow: claim → generate → judge (×3) → send/flag → count |
+| `app/workflows/email.py` | Per-contact workflow: generate → judge (×3) → send/flag → count |
 | `app/workflows/optimize.py` | GEPA optimization workflow and promotion |
 | `app/program.py` | DSPy signature/module, LM setup, versioned storage (Vercel Blob) |
 | `app/judge.py` | Jev rubric judge via the AI SDK for Python (`ai.ops.experimental.evaluate`) |
 | `app/optimize.py` | GEPA metric, dataset building, head-to-head scoring |
-| `app/db.py` | SQLite schema and all reads/writes |
+| `app/db.py` | All Postgres reads/writes |
+| `schema.sql` | Postgres schema, applied when the Docker volume is created |
 | `app/config.py` | Env-driven settings |
 
 ## How it works
 
 **Email workflow** (`email_contact`)
-1. `claim_contact` marks the contact running and *pins* the active program
-   version on the row. Retries and later steps use that version even if a new
-   one is promoted mid-run.
+1. `get_active_version` reads the active program version. Workflows replay
+   recorded step results, so the run keeps this version even if a new one is
+   promoted mid-run.
 2. `generate_draft` → `evaluate_draft`, up to `MAX_ATTEMPTS` times. Failed
    attempts feed the previous draft and the judge's feedback into the next
    generation.
-3. If the email passes, `send_email` records it. Otherwise the contact is flagged.
-4. `finish_contact` assigns a global completion number. Every
-   `OPTIMIZE_EVERY`-th completion runs `trigger_optimization`.
+   Each attempt is appended to the contact's `attempts` JSONB array.
+3. If the email passes, `send_email` logs it. Otherwise the contact is flagged.
+4. `finish_contact` takes the next value of the `completions` sequence. Every
+   `OPTIMIZE_EVERY`-th completion runs `start_optimization`.
 
 **Judge.** Jev answers seven yes/no rubric questions (personalized, relevant
 value, clear CTA, concise, tone, subject line, accurate), each returned as a
@@ -47,24 +49,13 @@ feedback, used for regeneration and as GEPA's reflection feedback.
    generations with the Jev metric.
 3. Scores the active and candidate programs on the held-out set. If the
    candidate wins by at least `MIN_IMPROVEMENT`, it is uploaded to Blob and
-   promoted with a compare-and-swap on the active version. A concurrent
-   optimization therefore can't overwrite a newer winner.
-
-**Idempotency**
-- Contacts are keyed by `external_id`, or by email if there is no ID.
-  Resubmitting a contact does not start a new run, and a contact is owned by
-  one run ID.
-- Attempts are keyed by `(contact_id, attempt)`. A retried generate step
-  returns the stored draft instead of regenerating.
-- The outbox is keyed by contact, so a contact cannot be sent twice.
-- Completion numbers are assigned inside a `BEGIN IMMEDIATE` transaction and
-  keyed by contact, so a retry gets the same number back.
-- Optimization batches are keyed by `completion // 25` and record the run ID
-  that owns them.
+   inserted into `program_versions`. The highest version is always the
+   active one.
 
 ## Running locally
 
 ```bash
+docker compose up -d   # Postgres 17 on localhost:5432 (works with OrbStack)
 uv sync
 vercel link            # once
 vercel env pull        # AI_GATEWAY_API_KEY / OIDC, BLOB_READ_WRITE_TOKEN
@@ -79,6 +70,9 @@ curl -X POST localhost:3000/api/contacts -H 'content-type: application/json' -d 
 }'
 curl localhost:3000/api/stats
 ```
+
+`schema.sql` only runs when the volume is first created. After changing it,
+reset with `docker compose down -v && docker compose up -d`.
 
 Without `BLOB_READ_WRITE_TOKEN`, program versions are written to
 `.data/programs/` so the loop still works offline.
@@ -95,16 +89,17 @@ Without `BLOB_READ_WRITE_TOKEN`, program versions are written to
 | `OPTIMIZE_EVERY` / `OPTIMIZE_RECENT` / `OPTIMIZE_HISTORY` | `25` / `25` / `75` |
 | `GEPA_AUTO` / `GEPA_MAX_METRIC_CALLS` | `light` / unset |
 | `MIN_IMPROVEMENT` | `0.01` |
-| `DATA_DIR` / `DATABASE_PATH` | `.data` / `.data/app.db` |
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/emails` |
+| `DATA_DIR` | `.data` (local program storage) |
 
 ## Caveats
 
-- **SQLite is local-only.** Vercel functions have an ephemeral, per-instance
-  filesystem, so on a deployment the counter, idempotency rows and active
-  version would not persist or be shared. To deploy, swap `app/db.py` for a
-  hosted SQLite (Turso/libSQL) or Postgres. All SQL lives in that one module.
-- **Sending is stubbed.** `send_email` only writes to the `outbox` table.
-  Replace it with a provider and pass the contact ID as the idempotency key.
+- **No idempotency (demo).** Submitting a contact twice starts two runs, and
+  a step that fails after writing can retry and write again (for example, a
+  duplicate attempt entry).
+- **Sending is stubbed.** `send_email` only logs.
+- **Deploying:** point `DATABASE_URL` at a hosted Postgres (e.g. Neon) and
+  apply `schema.sql` to it with `psql`.
 - **GEPA runs in one step.** `optimize_and_compare` can take many minutes.
   Keep it within your function's max duration by lowering `GEPA_AUTO` or
   setting `GEPA_MAX_METRIC_CALLS`.
