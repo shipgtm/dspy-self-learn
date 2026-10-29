@@ -9,8 +9,9 @@ DATABASE_URL = os.environ.get(
 )
 
 # Generation goes through AI Gateway via LiteLLM's vercel_ai_gateway provider.
-GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "moonshotai/kimi-k3.1-pro")
-REFLECTION_MODEL = os.environ.get("REFLECTION_MODEL", "moonshotai/kimi-k3.1-pro")
+# No extended thinking is requested, so generations come back without reasoning.
+GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "anthropic/claude-sonnet-5")
+REFLECTION_MODEL = os.environ.get("REFLECTION_MODEL", "anthropic/claude-sonnet-5")
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "typesafe-ai/jev-1.14.0")
 
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "3"))
