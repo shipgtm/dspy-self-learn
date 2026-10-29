@@ -11,6 +11,7 @@ dependencies = [
     "ai[vercel]>=0.8.0",
     "dspy>=3.4.1",
     "fastapi>=0.162.0",
+    "psycopg[binary]>=3.2",
     "pydantic>=2.14.1",
     "vercel>=0.12.1",
     "vercel-workflow>=0.12.0",

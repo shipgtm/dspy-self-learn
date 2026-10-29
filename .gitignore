@@ -13,4 +13,5 @@ wheels/
 .data/
 .workflow-data/
 .env*
+!.env.example
 .vercel
