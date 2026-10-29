@@ -88,7 +88,8 @@ Without `BLOB_READ_WRITE_TOKEN`, program versions are written to
 | `CAMPAIGN_BRIEF` | sample B2B brief: set this to your real offer |
 | `MAX_ATTEMPTS` / `PASS_THRESHOLD` / `CRITERION_FLOOR` | `3` / `0.8` / `0.5` |
 | `OPTIMIZE_EVERY` / `OPTIMIZE_RECENT` / `OPTIMIZE_HISTORY` | `25` / `25` / `75` |
-| `GEPA_AUTO` / `GEPA_MAX_METRIC_CALLS` | `light` / unset |
+| `GEPA_AUTO` / `GEPA_MAX_METRIC_CALLS` | `light` / unset (`.env.example` sets 30; `light` allows ~470) |
+| `GEPA_VALSET_SIZE` | `8` (contacts GEPA scores promising prompts on) |
 | `MIN_IMPROVEMENT` | `0.01` |
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/emails` |
 | `DATA_DIR` | `.data` (local program storage) |
