@@ -9,8 +9,12 @@ DATABASE_URL = os.environ.get(
 )
 
 # Generation goes through AI Gateway via LiteLLM's vercel_ai_gateway provider.
-GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "deepseek/deepseek-v4.1-flash-1017")
-REFLECTION_MODEL = os.environ.get("REFLECTION_MODEL", "deepseek/deepseek-v4.1-flash-1017")
+GENERATION_MODEL = os.environ.get(
+    "GENERATION_MODEL", "deepseek/deepseek-v4.1-flash-1017"
+)
+REFLECTION_MODEL = os.environ.get(
+    "REFLECTION_MODEL", "deepseek/deepseek-v4.1-flash-1017"
+)
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "typesafe-ai/jev-1.14.0")
 
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "3"))
@@ -27,7 +31,7 @@ GEPA_AUTO = os.environ.get("GEPA_AUTO", "light")
 # Caps GEPA's scored generations. Defaults to 30 in code because `vercel dev`
 # doesn't pass .env.local to the workflow worker; set to 0 to use GEPA_AUTO
 # instead (light allows ~470).
-GEPA_MAX_METRIC_CALLS = int(os.environ.get("GEPA_MAX_METRIC_CALLS", "30")) or None
+GEPA_MAX_METRIC_CALLS = int(os.environ.get("GEPA_MAX_METRIC_CALLS", "60")) or None
 # GEPA scores each promising prompt on this many contacts (separate from training).
 GEPA_VALSET_SIZE = int(os.environ.get("GEPA_VALSET_SIZE", "8"))
 # The candidate must beat the active program by at least this much to be promoted.
