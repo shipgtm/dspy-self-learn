@@ -19,36 +19,28 @@ class Contact(pydantic.BaseModel):
     company: str | None = None
     role: str | None = None
     notes: str | None = None
-    extra: dict[str, pydantic.JsonValue] = {}
 
     def contact_id(self) -> str:
         key = self.external_id or self.email.lower()
         return "c_" + hashlib.sha256(key.encode()).hexdigest()[:20]
 
 
-class ContactBatch(pydantic.BaseModel):
-    contacts: list[Contact] = pydantic.Field(min_length=1, max_length=500)
-
-
 @app.post("/api/contacts")
-async def submit_contacts(batch: ContactBatch) -> dict:
-    """Register contacts and start one email workflow per new contact.
+async def submit_contact(contact: Contact) -> dict:
+    """Start the email workflow for a contact.
 
     Contacts are deduplicated by external_id (or email), so resubmitting a
-    contact never starts a second workflow.
+    contact returns its existing run instead of starting a second one.
     """
-    results = []
-    for contact in batch.contacts:
-        profile = contact.model_dump(exclude={"external_id"}, exclude_none=True, mode="json")
-        row, created = db.upsert_contact(contact.contact_id(), contact.email.lower(), profile)
-        if row["run_id"] is None and row["status"] == "pending":
-            run = await workflow.start(email_contact, contact_id=row["id"])
-            db.set_run_id(row["id"], run.run_id)
-            row = db.get_contact(row["id"])
-        results.append(
-            {"contact_id": row["id"], "run_id": row["run_id"], "status": row["status"], "created": created}
+    profile = contact.model_dump(exclude={"external_id"}, exclude_none=True)
+    row, created = db.upsert_contact(contact.contact_id(), contact.email.lower(), profile)
+    if row["run_id"] is None:
+        run = await workflow.start(
+            email_contact, contact_id=row["id"], email=row["email"], profile=profile
         )
-    return {"contacts": results}
+        db.set_run_id(row["id"], run.run_id)
+        row = db.get_contact(row["id"])
+    return {"contact_id": row["id"], "run_id": row["run_id"], "status": row["status"], "created": created}
 
 
 @app.get("/api/contacts/{contact_id}")

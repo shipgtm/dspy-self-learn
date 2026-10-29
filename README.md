@@ -12,7 +12,7 @@ new active version.
 
 | Path | Purpose |
 | --- | --- |
-| `app/main.py` | FastAPI: submit contacts, inspect contacts, versions, optimizations, stats |
+| `app/main.py` | FastAPI: submit a contact, inspect contacts, versions, optimizations, stats |
 | `app/workflows/email.py` | Per-contact workflow: claim → generate → judge (×3) → send/flag → count |
 | `app/workflows/optimize.py` | GEPA optimization workflow and promotion |
 | `app/program.py` | DSPy signature/module, LM setup, versioned storage (Vercel Blob) |
@@ -74,8 +74,8 @@ npx workflow web       # inspect runs
 
 ```bash
 curl -X POST localhost:3000/api/contacts -H 'content-type: application/json' -d '{
-  "contacts": [{"email": "dana@example.com", "name": "Dana Lee", "company": "Northwind",
-                "role": "VP Support", "notes": "Hiring 10 support agents this quarter"}]
+  "email": "dana@example.com", "name": "Dana Lee", "company": "Northwind",
+  "role": "VP Support", "notes": "Hiring 10 support agents this quarter"
 }'
 curl localhost:3000/api/stats
 ```

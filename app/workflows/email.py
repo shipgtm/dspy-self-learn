@@ -29,22 +29,23 @@ async def claim_contact(*, contact_id: str) -> dict:
 
 @wf.step
 async def generate_draft(
-    *, contact_id: str, attempt: int, version: int, previous_draft: str, feedback: str
+    *, contact_id: str, profile: dict, attempt: int, version: int, previous_draft: str, feedback: str
 ) -> dict:
-    from app import config, db
-    from app.program import generation_lm, load_program
+    import json
 
     import dspy
+
+    from app import config, db
+    from app.program import generation_lm, load_program
 
     if (existing := db.get_attempt(contact_id, attempt)) is not None:
         return {"subject": existing["subject"], "body": existing["body"]}
 
-    contact = db.get_contact(contact_id)
     program = await load_program(version)
     with dspy.context(lm=generation_lm()):
         pred = await program.acall(
             campaign=config.CAMPAIGN_BRIEF,
-            contact=contact["profile"],
+            contact=json.dumps(profile),
             previous_draft=previous_draft,
             reviewer_feedback=feedback,
         )
@@ -53,15 +54,14 @@ async def generate_draft(
 
 
 @wf.step
-async def evaluate_draft(*, contact_id: str, attempt: int, subject: str, body: str) -> dict:
-    import json
-
+async def evaluate_draft(
+    *, contact_id: str, profile: dict, attempt: int, subject: str, body: str
+) -> dict:
     from app import config, db, judge
 
-    contact = db.get_contact(contact_id)
     verdict = await judge.judge(
         campaign=config.CAMPAIGN_BRIEF,
-        contact=json.loads(contact["profile"]),
+        contact=profile,
         subject=subject,
         body=body,
     )
@@ -70,7 +70,7 @@ async def evaluate_draft(*, contact_id: str, attempt: int, subject: str, body: s
 
 
 @wf.step
-async def send_email(*, contact_id: str, subject: str, body: str) -> bool:
+async def send_email(*, contact_id: str, email: str, subject: str, body: str) -> bool:
     """Stub sender: records the email in the outbox. The outbox is keyed by
     contact, so a contact can never be sent twice. Swap in a real provider
     here, using the contact ID as the provider's idempotency key."""
@@ -78,10 +78,9 @@ async def send_email(*, contact_id: str, subject: str, body: str) -> bool:
 
     from app import db
 
-    contact = db.get_contact(contact_id)
-    first = db.record_send(contact_id, contact["email"], subject, body)
+    first = db.record_send(contact_id, email, subject, body)
     if first:
-        logging.getLogger(__name__).info("sent email to %s: %s", contact["email"], subject)
+        logging.getLogger(__name__).info("sent email to %s: %s", email, subject)
     return first
 
 
@@ -108,7 +107,7 @@ async def trigger_optimization(*, batch: int) -> str:
 
 
 @wf.workflow
-async def email_contact(*, contact_id: str) -> dict:
+async def email_contact(*, contact_id: str, email: str, profile: dict) -> dict:
     from app import config
 
     claim = await claim_contact(contact_id=contact_id)
@@ -122,19 +121,22 @@ async def email_contact(*, contact_id: str) -> dict:
     for attempt in range(1, config.MAX_ATTEMPTS + 1):
         draft = await generate_draft(
             contact_id=contact_id,
+            profile=profile,
             attempt=attempt,
             version=version,
             previous_draft=previous_draft,
             feedback=feedback,
         )
-        verdict = await evaluate_draft(contact_id=contact_id, attempt=attempt, **draft)
+        verdict = await evaluate_draft(
+            contact_id=contact_id, profile=profile, attempt=attempt, **draft
+        )
         if verdict["passed"]:
             break
         previous_draft = f"Subject: {draft['subject']}\n\n{draft['body']}"
         feedback = verdict["feedback"]
 
     if verdict["passed"]:
-        await send_email(contact_id=contact_id, **draft)
+        await send_email(contact_id=contact_id, email=email, **draft)
         status = "sent"
     else:
         status = "flagged"
