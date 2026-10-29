@@ -1,45 +1,33 @@
 """Per-contact email workflow: generate -> judge -> retry with feedback -> send or flag.
 
-The workflow body only orchestrates. Heavy modules (DSPy, sqlite, the AI SDK)
+The workflow body only orchestrates. Heavy modules (DSPy, psycopg, the AI SDK)
 are imported inside step bodies so the deterministic workflow sandbox never
 has to load them.
 """
 
 from vercel import workflow
-from vercel.workflow import FatalError
 
 from app.workflow import wf
 from app.workflows.optimize import optimize_program
 
 
 @wf.step
-async def claim_contact(*, contact_id: str) -> dict:
-    """Mark the contact running and pin the program version it will use."""
+async def get_active_version() -> int:
+    """The program version this run uses. Step results are replayed, so the
+    run keeps this version even if a newer one is promoted mid-run."""
     from app import db
 
-    run_id = workflow.get_step_metadata().run_id
-    try:
-        row = db.claim_contact(contact_id, run_id)
-    except LookupError:
-        raise FatalError(f"unknown contact {contact_id}") from None
-    except RuntimeError as e:
-        raise FatalError(str(e)) from None
-    return {"status": row["status"], "version": row["program_version"]}
+    return await db.active_version()
 
 
 @wf.step
-async def generate_draft(
-    *, contact_id: str, profile: dict, attempt: int, version: int, previous_draft: str, feedback: str
-) -> dict:
+async def generate_draft(*, profile: dict, version: int, previous_draft: str, feedback: str) -> dict:
     import json
 
     import dspy
 
-    from app import config, db
+    from app import config
     from app.program import generation_lm, load_program
-
-    if (existing := db.get_attempt(contact_id, attempt)) is not None:
-        return {"subject": existing["subject"], "body": existing["body"]}
 
     program = await load_program(version)
     with dspy.context(lm=generation_lm()):
@@ -49,108 +37,66 @@ async def generate_draft(
             previous_draft=previous_draft,
             reviewer_feedback=feedback,
         )
-    row = db.save_draft(contact_id, attempt, version, pred.subject.strip(), pred.body.strip(), feedback)
-    return {"subject": row["subject"], "body": row["body"]}
+    return {"subject": pred.subject.strip(), "body": pred.body.strip()}
 
 
 @wf.step
-async def evaluate_draft(
-    *, contact_id: str, profile: dict, attempt: int, subject: str, body: str
-) -> dict:
+async def evaluate_draft(*, contact_id: int, profile: dict, subject: str, body: str) -> dict:
+    """Judge the draft and log the attempt on the contact."""
     from app import config, db, judge
 
     verdict = await judge.judge(
-        campaign=config.CAMPAIGN_BRIEF,
-        contact=profile,
-        subject=subject,
-        body=body,
+        campaign=config.CAMPAIGN_BRIEF, contact=profile, subject=subject, body=body
     )
-    db.save_verdict(contact_id, attempt, verdict.score, verdict.passed, verdict.feedback, verdict.criteria)
+    await db.add_attempt(contact_id, {"subject": subject, "body": body, **verdict.model_dump()})
     return verdict.model_dump()
 
 
 @wf.step
-async def send_email(*, contact_id: str, email: str, subject: str, body: str) -> bool:
-    """Stub sender: records the email in the outbox. The outbox is keyed by
-    contact, so a contact can never be sent twice. Swap in a real provider
-    here, using the contact ID as the provider's idempotency key."""
+async def send_email(*, email: str, subject: str, body: str) -> None:
+    """Stub sender: logs instead of delivering."""
     import logging
 
-    from app import db
-
-    first = db.record_send(contact_id, email, subject, body)
-    if first:
-        logging.getLogger(__name__).info("sent email to %s: %s", email, subject)
-    return first
+    logging.getLogger(__name__).info("sent email to %s: %s", email, subject)
 
 
 @wf.step
-async def finish_contact(*, contact_id: str, status: str, attempts: int, score: float | None) -> int:
-    """Close out the contact and take its completion sequence number."""
+async def finish_contact(*, contact_id: int, status: str, version: int) -> int:
     from app import db
 
-    db.finish_contact(contact_id, status, attempts, score)
-    return db.record_completion(contact_id)
+    return await db.finish_contact(contact_id, status, version)
 
 
 @wf.step
-async def trigger_optimization(*, batch: int) -> str:
-    """Start the optimization workflow for this batch, at most once."""
-    from app import db
-
-    claim = db.claim_optimization(batch)
-    if claim["run_id"]:
-        return claim["run_id"]
+async def start_optimization(*, batch: int) -> str:
     run = await workflow.start(optimize_program, batch=batch)
-    db.update_optimization(batch, run_id=run.run_id)
     return run.run_id
 
 
 @wf.workflow
-async def email_contact(*, contact_id: str, email: str, profile: dict) -> dict:
+async def email_contact(*, contact_id: int, email: str, profile: dict) -> dict:
     from app import config
 
-    claim = await claim_contact(contact_id=contact_id)
-    if claim["status"] != "running":
-        # Already finished by an earlier run; nothing to do.
-        return {"contact_id": contact_id, "status": claim["status"], "skipped": True}
-
-    version = claim["version"]
+    version = await get_active_version()
     previous_draft, feedback = "", ""
-    draft, verdict, attempt = None, None, 0
     for attempt in range(1, config.MAX_ATTEMPTS + 1):
         draft = await generate_draft(
-            contact_id=contact_id,
-            profile=profile,
-            attempt=attempt,
-            version=version,
-            previous_draft=previous_draft,
-            feedback=feedback,
+            profile=profile, version=version, previous_draft=previous_draft, feedback=feedback
         )
-        verdict = await evaluate_draft(
-            contact_id=contact_id, profile=profile, attempt=attempt, **draft
-        )
+        verdict = await evaluate_draft(contact_id=contact_id, profile=profile, **draft)
         if verdict["passed"]:
             break
         previous_draft = f"Subject: {draft['subject']}\n\n{draft['body']}"
         feedback = verdict["feedback"]
 
     if verdict["passed"]:
-        await send_email(contact_id=contact_id, email=email, **draft)
+        await send_email(email=email, **draft)
         status = "sent"
     else:
         status = "flagged"
 
-    seq = await finish_contact(
-        contact_id=contact_id, status=status, attempts=attempt, score=verdict["score"]
-    )
+    seq = await finish_contact(contact_id=contact_id, status=status, version=version)
     if seq % config.OPTIMIZE_EVERY == 0:
-        await trigger_optimization(batch=seq // config.OPTIMIZE_EVERY)
+        await start_optimization(batch=seq // config.OPTIMIZE_EVERY)
 
-    return {
-        "contact_id": contact_id,
-        "status": status,
-        "attempts": attempt,
-        "score": verdict["score"],
-        "program_version": version,
-    }
+    return {"contact_id": contact_id, "status": status, "attempts": attempt, "version": version}

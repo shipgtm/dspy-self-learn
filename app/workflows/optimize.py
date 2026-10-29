@@ -1,8 +1,5 @@
 """Optimization workflow: GEPA-optimize the active program and promote it if it wins."""
 
-from vercel import workflow
-from vercel.workflow import FatalError
-
 from app.workflow import wf
 
 
@@ -16,57 +13,32 @@ async def optimize_and_compare(*, batch: int) -> dict:
     from app import config, db, optimize
     from app.program import load_program, save_program
 
-    run_id = workflow.get_step_metadata().run_id
-    claim = db.claim_optimization(batch)
-    if claim["run_id"] not in (None, run_id):
-        raise FatalError(f"batch {batch} is owned by run {claim['run_id']}")
-    if claim["status"] not in ("pending", "running", "failed"):
-        return claim  # already decided on an earlier attempt
-
-    base_version = db.active_version()
-    db.update_optimization(batch, run_id=run_id, status="running", base_version=base_version)
+    base_version = await db.active_version()
     base = await load_program(base_version)
-
-    try:
-        result = await asyncio.to_thread(optimize.run, base, batch)
-    except Exception as e:
-        db.update_optimization(batch, status="failed", detail=repr(e)[:2000], finished_at=db.now())
-        raise
+    rows = await db.training_rows(config.OPTIMIZE_RECENT, config.OPTIMIZE_HISTORY)
+    result = await asyncio.to_thread(optimize.run, base, rows, batch)
 
     if result["status"] == "skipped":
-        db.update_optimization(batch, status="skipped", detail=result["detail"], finished_at=db.now())
-        return {"status": "skipped", "detail": result["detail"]}
+        summary = {"detail": result["detail"]}
+        await db.record_optimization(batch, "skipped", summary)
+        return {"status": "skipped", **summary}
 
-    base_score, candidate_score = result["base_score"], result["candidate_score"]
-    summary = {
-        "base_version": base_version,
-        "base_score": base_score,
-        "candidate_score": candidate_score,
+    scores = {
+        "base": result["base_score"],
+        "candidate": result["candidate_score"],
+        "n_train": result["n_train"],
+        "n_test": result["n_test"],
     }
-    if candidate_score < base_score + config.MIN_IMPROVEMENT:
-        db.update_optimization(batch, status="rejected", finished_at=db.now(), **summary)
+    summary = {"base_version": base_version, "scores": scores}
+    if scores["candidate"] < scores["base"] + config.MIN_IMPROVEMENT:
+        await db.record_optimization(batch, "rejected", summary)
         return {"status": "rejected", **summary}
 
-    version = db.next_version()
-    location = await save_program(result["candidate"], f"v{version}-batch{batch}")
-    promoted = db.promote_version(
-        version=version,
-        parent_version=base_version,
-        location=location,
-        instructions=result["instructions"],
-        score=candidate_score,
-        parent_score=base_score,
-    )
-    status = "promoted" if promoted else "superseded"
-    db.update_optimization(
-        batch,
-        status=status,
-        candidate_version=version if promoted else None,
-        detail=None if promoted else "active version changed during optimization",
-        finished_at=db.now(),
-        **summary,
-    )
-    return {"status": status, "version": version, **summary}
+    location = await save_program(result["candidate"], f"batch{batch}")
+    version = await db.add_version(location, result["instructions"], scores)
+    summary["version"] = version
+    await db.record_optimization(batch, "promoted", summary)
+    return {"status": "promoted", **summary}
 
 
 @wf.workflow

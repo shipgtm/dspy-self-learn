@@ -110,7 +110,7 @@ async def load_program(version: int) -> EmailProgram:
     if version == 0:
         return program
     if version not in _cache:
-        row = db.get_version(version)
+        row = await db.get_version(version)
         if row is None:
             raise LookupError(f"program version {version} not found")
         _cache[version] = json.loads(await _read_location(row["location"]))

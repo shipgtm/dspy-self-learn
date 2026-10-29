@@ -9,7 +9,7 @@ from typing import Any
 
 import dspy
 
-from app import config, db, judge
+from app import config, judge
 from app.program import EmailProgram, generation_lm, instructions, make_lm
 
 INPUTS = ("campaign", "contact", "previous_draft", "reviewer_feedback")
@@ -41,12 +41,12 @@ def to_example(row: dict) -> dspy.Example:
     """A first-attempt example: the same inputs the email workflow uses on attempt 1."""
     return dspy.Example(
         campaign=config.CAMPAIGN_BRIEF,
-        contact=row["profile"],
+        contact=json.dumps(row["profile"]),
         previous_draft="",
         reviewer_feedback="",
         # Kept for analysis only; GEPA scores fresh generations with the judge.
-        past_feedback=row["feedback"] or "",
-        past_score=row["score"],
+        past_feedback=row["first"]["feedback"],
+        past_score=row["first"]["score"],
     ).with_inputs(*INPUTS)
 
 
@@ -82,9 +82,8 @@ def score(program: EmailProgram, devset: list[dspy.Example]) -> float:
     return float(evaluator(program).score) / 100
 
 
-def run(base: EmailProgram, seed: int) -> dict:
-    """Optimize `base` and score both programs. Blocking; call from a thread."""
-    rows = db.training_rows(config.OPTIMIZE_RECENT, config.OPTIMIZE_HISTORY)
+def run(base: EmailProgram, rows: list[dict], seed: int) -> dict:
+    """Optimize `base` on `rows` and score both programs. Blocking; call from a thread."""
     examples = [to_example(r) for r in rows]
     if len(examples) < 10:
         return {"status": "skipped", "detail": f"only {len(examples)} examples"}

@@ -4,7 +4,9 @@ import os
 from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", ".data"))
-DATABASE_PATH = Path(os.environ.get("DATABASE_PATH", DATA_DIR / "app.db"))
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/emails"
+)
 
 # Generation goes through AI Gateway via LiteLLM's vercel_ai_gateway provider.
 GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "anthropic/claude-sonnet-5")
