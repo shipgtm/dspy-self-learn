@@ -1,24 +1,23 @@
 [project]
 name = "dspy-self-learn"
 version = "0.1.0"
-description = "Add your description here"
+description = "Self-improving email generation with DSPy, GEPA, Jev and Vercel Workflows"
 readme = "README.md"
 authors = [
     { name = "Cameron Youngblood", email = "cameron.youngblood@gmail.com" },
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "ai[vercel]>=0.8.0",
+    "dspy>=3.4.1",
     "fastapi>=0.162.0",
     "pydantic>=2.14.1",
+    "vercel>=0.12.1",
     "vercel-workflow>=0.12.0",
 ]
 
-[project.scripts]
-dspy-self-learn = "dspy_self_learn:main"
-
-[build-system]
-requires = ["uv_build>=0.13.6,<0.14.0"]
-build-backend = "uv_build"
+[tool.uv]
+package = false
 
 [[tool.vercel.workflows]]
 entrypoint = "app.workflows:wf"
