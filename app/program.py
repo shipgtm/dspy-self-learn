@@ -38,6 +38,14 @@ class EmailProgram(dspy.Module):
             reviewer_feedback=reviewer_feedback,
         )
 
+    async def aforward(self, campaign: str, contact: str, previous_draft: str = "", reviewer_feedback: str = ""):
+        return await self.write.acall(
+            campaign=campaign,
+            contact=contact,
+            previous_draft=previous_draft,
+            reviewer_feedback=reviewer_feedback,
+        )
+
 
 def make_lm(model: str, **kwargs) -> dspy.LM:
     return dspy.LM(
