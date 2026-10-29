@@ -25,6 +25,11 @@ async def submit_contact(contact: Contact) -> dict:
     return {"contact_id": contact_id, "run_id": run.run_id}
 
 
+@app.get("/api/contacts")
+async def list_contacts(status: str | None = None) -> dict:
+    return {"contacts": await db.list_contacts(status)}
+
+
 @app.get("/api/contacts/{contact_id}")
 async def get_contact(contact_id: int) -> dict:
     row = await db.get_contact(contact_id)
@@ -33,9 +38,27 @@ async def get_contact(contact_id: int) -> dict:
     return row
 
 
+@app.get("/api/dashboard")
+async def dashboard() -> dict:
+    """Everything the dashboard needs in one request. `vercel dev` drops its
+    Python server when several requests overlap, so the page polls only this."""
+    return {
+        "stats": await stats(),
+        "contacts": (await list_contacts())["contacts"],
+        "optimizations": (await list_optimizations())["optimizations"],
+        "versions": (await list_versions())["versions"],
+    }
+
+
 @app.get("/api/versions")
 async def list_versions() -> dict:
-    return {"active_version": await db.active_version(), "versions": await db.list_versions()}
+    from app.program import EmailProgram, instructions
+
+    baseline = {"version": 0, "instructions": instructions(EmailProgram()), "location": None}
+    return {
+        "active_version": await db.active_version(),
+        "versions": [*await db.list_versions(), baseline],
+    }
 
 
 @app.get("/api/optimizations")
@@ -45,4 +68,11 @@ async def list_optimizations() -> dict:
 
 @app.get("/api/stats")
 async def stats() -> dict:
-    return await db.stats()
+    from app import config
+
+    return {
+        **await db.stats(),
+        "pass_threshold": config.PASS_THRESHOLD,
+        "criterion_floor": config.CRITERION_FLOOR,
+        "optimize_every": config.OPTIMIZE_EVERY,
+    }

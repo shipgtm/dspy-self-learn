@@ -37,6 +37,14 @@ async def get_contact(contact_id: int) -> dict | None:
     return await _one("SELECT * FROM contacts WHERE id = %s", (contact_id,))
 
 
+async def list_contacts(status: str | None = None, limit: int = 200) -> list[dict]:
+    if status:
+        return await _query(
+            "SELECT * FROM contacts WHERE status = %s ORDER BY id DESC LIMIT %s", (status, limit)
+        )
+    return await _query("SELECT * FROM contacts ORDER BY id DESC LIMIT %s", (limit,))
+
+
 async def add_attempt(contact_id: int, attempt: dict) -> None:
     await _query(
         "UPDATE contacts SET attempts = attempts || %s WHERE id = %s",

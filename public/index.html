@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShipGTM Email Runs</title>
+  <link rel="icon" href="/brand/shipgtm-logo-dark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-brand">
+      <picture>
+        <source srcset="/brand/shipgtm-logo-light.svg" media="(prefers-color-scheme: dark)">
+        <img class="logo" src="/brand/shipgtm-logo-dark.svg" alt="SHIP GTM">
+      </picture>
+      <div>
+        <h1>Self-learning email</h1>
+        <p class="sub">Generate → judge with Jev → retry with feedback → GEPA every <span data-stat="optimize_every">25</span> completions</p>
+      </div>
+    </div>
+    <div class="masthead-art" aria-hidden="true"></div>
+  </header>
+
+  <section class="stats" aria-label="Summary">
+    <div class="stat"><span class="stat-label">Contacts</span><span class="stat-value" data-stat="total">–</span></div>
+    <div class="stat"><span class="stat-label">Sent</span><span class="stat-value" data-stat="sent">–</span></div>
+    <div class="stat"><span class="stat-label">Flagged</span><span class="stat-value" data-stat="flagged">–</span></div>
+    <div class="stat"><span class="stat-label">In progress</span><span class="stat-value" data-stat="pending">–</span></div>
+    <div class="stat"><span class="stat-label">1st-attempt pass</span><span class="stat-value" data-stat="first_pass">–</span></div>
+    <div class="stat"><span class="stat-label">Active prompt</span><span class="stat-value" data-stat="active_version">–</span></div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="contacts">Contacts <span class="count" data-count="contacts"></span></button>
+    <button role="tab" data-tab="failed">Failed <span class="count" data-count="failed"></span></button>
+    <button role="tab" data-tab="optimizations">Optimizations <span class="count" data-count="optimizations"></span></button>
+    <span class="live" title="Refreshes every 5 seconds"><span class="live-dot"></span>Live</span>
+  </nav>
+
+  <main>
+    <section id="panel-contacts" class="panel" role="tabpanel"></section>
+    <section id="panel-failed" class="panel" role="tabpanel" hidden></section>
+    <section id="panel-optimizations" class="panel" role="tabpanel" hidden></section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

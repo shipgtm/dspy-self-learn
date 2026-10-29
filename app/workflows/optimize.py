@@ -29,7 +29,7 @@ async def optimize_and_compare(*, batch: int) -> dict:
         "n_train": result["n_train"],
         "n_test": result["n_test"],
     }
-    summary = {"base_version": base_version, "scores": scores}
+    summary = {"base_version": base_version, "scores": scores, "instructions": result["instructions"]}
     if scores["candidate"] < scores["base"] + config.MIN_IMPROVEMENT:
         await db.record_optimization(batch, "rejected", summary)
         return {"status": "rejected", **summary}

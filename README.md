@@ -13,6 +13,7 @@ new active version.
 | Path | Purpose |
 | --- | --- |
 | `app/main.py` | FastAPI: submit a contact, inspect contacts, versions, optimizations, stats |
+| `public/` | Dashboard (served at `/`): contacts, failures, optimizations with prompt diffs |
 | `app/workflows/email.py` | Per-contact workflow: generate → judge (×3) → send/flag → count |
 | `app/workflows/optimize.py` | GEPA optimization workflow and promotion |
 | `app/program.py` | DSPy signature/module, LM setup, versioned storage (Vercel Blob) |
