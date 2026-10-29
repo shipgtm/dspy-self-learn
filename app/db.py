@@ -1,5 +1,7 @@
 """Postgres access. The schema lives in schema.sql."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import psycopg
@@ -115,6 +117,24 @@ async def add_version(location: str, instructions: str, scores: dict) -> int:
 
 
 # --- optimization runs ------------------------------------------------------
+
+OPTIMIZATION_LOCK = 1  # advisory lock namespace for optimization batches
+
+
+@asynccontextmanager
+async def optimization_lock(batch: int) -> AsyncIterator[bool]:
+    """Try to take the lock for a batch; yields whether we got it.
+
+    The lock lives on its own connection for as long as the block runs and is
+    released when the connection closes, including when the process dies.
+    """
+    conn = await psycopg.AsyncConnection.connect(config.DATABASE_URL, autocommit=True)
+    try:
+        cur = await conn.execute("SELECT pg_try_advisory_lock(%s, %s)", (OPTIMIZATION_LOCK, batch))
+        yield (await cur.fetchone())[0]
+    finally:
+        await conn.close()
+
 
 
 async def record_optimization(batch: int, status: str, result: dict) -> None:
