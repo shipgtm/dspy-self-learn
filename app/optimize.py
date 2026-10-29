@@ -10,6 +10,7 @@ from collections.abc import Coroutine
 from typing import Any
 
 import dspy
+import litellm  # noqa: F401  # load fully before GEPA's threads race to import it
 
 from app import config, judge
 from app.program import EmailProgram, generation_lm, instructions, make_lm

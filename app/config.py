@@ -24,8 +24,10 @@ OPTIMIZE_EVERY = int(os.environ.get("OPTIMIZE_EVERY", "25"))
 OPTIMIZE_RECENT = int(os.environ.get("OPTIMIZE_RECENT", "25"))
 OPTIMIZE_HISTORY = int(os.environ.get("OPTIMIZE_HISTORY", "75"))
 GEPA_AUTO = os.environ.get("GEPA_AUTO", "light")
-# Set to cap the GEPA budget explicitly instead of using GEPA_AUTO.
-GEPA_MAX_METRIC_CALLS = int(os.environ.get("GEPA_MAX_METRIC_CALLS", "0")) or None
+# Caps GEPA's scored generations. Defaults to 30 in code because `vercel dev`
+# doesn't pass .env.local to the workflow worker; set to 0 to use GEPA_AUTO
+# instead (light allows ~470).
+GEPA_MAX_METRIC_CALLS = int(os.environ.get("GEPA_MAX_METRIC_CALLS", "30")) or None
 # GEPA scores each promising prompt on this many contacts (separate from training).
 GEPA_VALSET_SIZE = int(os.environ.get("GEPA_VALSET_SIZE", "8"))
 # The candidate must beat the active program by at least this much to be promoted.
