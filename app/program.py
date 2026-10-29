@@ -51,6 +51,8 @@ def make_lm(model: str, **kwargs) -> dspy.LM:
     return dspy.LM(
         f"vercel_ai_gateway/{model}",
         api_key=config.gateway_api_key(),
+        # AI Gateway's Chat Completions toggle; turns reasoning off for models that allow it.
+        extra_body={"reasoning": {"enabled": False}},
         **kwargs,
     )
 

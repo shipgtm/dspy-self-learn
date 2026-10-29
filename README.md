@@ -82,8 +82,8 @@ Without `BLOB_READ_WRITE_TOKEN`, program versions are written to
 
 | Var | Default |
 | --- | --- |
-| `GENERATION_MODEL` | `anthropic/claude-sonnet-5` |
-| `REFLECTION_MODEL` | `anthropic/claude-sonnet-5` (GEPA reflection; a stronger model helps) |
+| `GENERATION_MODEL` | `deepseek/deepseek-v4.1-flash-1017` |
+| `REFLECTION_MODEL` | `deepseek/deepseek-v4.1-flash-1017` (GEPA reflection; a stronger model helps) |
 | `JUDGE_MODEL` | `typesafe-ai/jev-1.14.0` |
 | `CAMPAIGN_BRIEF` | sample B2B brief: set this to your real offer |
 | `MAX_ATTEMPTS` / `PASS_THRESHOLD` / `CRITERION_FLOOR` | `3` / `0.8` / `0.5` |

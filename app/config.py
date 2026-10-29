@@ -9,9 +9,8 @@ DATABASE_URL = os.environ.get(
 )
 
 # Generation goes through AI Gateway via LiteLLM's vercel_ai_gateway provider.
-# No extended thinking is requested, so generations come back without reasoning.
-GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "anthropic/claude-sonnet-5")
-REFLECTION_MODEL = os.environ.get("REFLECTION_MODEL", "anthropic/claude-sonnet-5")
+GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "deepseek/deepseek-v4.1-flash-1017")
+REFLECTION_MODEL = os.environ.get("REFLECTION_MODEL", "deepseek/deepseek-v4.1-flash-1017")
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "typesafe-ai/jev-1.14.0")
 
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "3"))
