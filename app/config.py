@@ -27,6 +27,8 @@ OPTIMIZE_HISTORY = int(os.environ.get("OPTIMIZE_HISTORY", "75"))
 GEPA_AUTO = os.environ.get("GEPA_AUTO", "light")
 # Set to cap the GEPA budget explicitly instead of using GEPA_AUTO.
 GEPA_MAX_METRIC_CALLS = int(os.environ.get("GEPA_MAX_METRIC_CALLS", "0")) or None
+# GEPA scores each promising prompt on this many contacts (separate from training).
+GEPA_VALSET_SIZE = int(os.environ.get("GEPA_VALSET_SIZE", "8"))
 # The candidate must beat the active program by at least this much to be promoted.
 MIN_IMPROVEMENT = float(os.environ.get("MIN_IMPROVEMENT", "0.01"))
 

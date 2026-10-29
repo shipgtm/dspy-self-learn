@@ -2,8 +2,10 @@
 
 import asyncio
 import json
+import itertools
 import random
 import threading
+import time
 from collections.abc import Coroutine
 from typing import Any
 
@@ -50,7 +52,11 @@ def to_example(row: dict) -> dspy.Example:
     ).with_inputs(*INPUTS)
 
 
+_judge_calls = itertools.count(1)
+
+
 def metric(gold, pred, trace=None, pred_name=None, pred_trace=None, program_trace=None):
+    next(_judge_calls)
     subject = (getattr(pred, "subject", "") or "").strip()
     body = (getattr(pred, "body", "") or "").strip()
     if not subject or not body:
@@ -69,12 +75,23 @@ def metric(gold, pred, trace=None, pred_name=None, pred_trace=None, program_trac
     return dspy.Prediction(score=verdict.score, feedback=feedback)
 
 
-def split(examples: list[dspy.Example], seed: int) -> tuple[list, list]:
-    """Shuffle deterministically and hold out ~30% for the head-to-head comparison."""
+def split(examples: list[dspy.Example], seed: int) -> tuple[list, list, list]:
+    """Shuffle deterministically into (train, val, test).
+
+    ~30% is held out as test for the head-to-head comparison. GEPA learns from
+    train and scores promising prompts on a small val set, so each full score
+    costs GEPA_VALSET_SIZE generations instead of the whole training set.
+    """
     examples = examples[:]
     random.Random(seed).shuffle(examples)
     n_test = max(3, round(len(examples) * 0.3))
-    return examples[n_test:], examples[:n_test]
+    n_val = min(config.GEPA_VALSET_SIZE, max(3, (len(examples) - n_test) // 3))
+    test, val, train = examples[:n_test], examples[n_test : n_test + n_val], examples[n_test + n_val :]
+    return train, val, test
+
+
+def _log(message: str) -> None:
+    print(f"[optimize] {message}", flush=True)
 
 
 def score(program: EmailProgram, devset: list[dspy.Example]) -> float:
@@ -88,20 +105,39 @@ def run(base: EmailProgram, rows: list[dict], seed: int) -> dict:
     if len(examples) < 10:
         return {"status": "skipped", "detail": f"only {len(examples)} examples"}
 
-    trainset, testset = split(examples, seed)
-    with dspy.context(lm=generation_lm()):
+    trainset, valset, testset = split(examples, seed)
+    _log(f"train={len(trainset)} val={len(valset)} test={len(testset)} budget={config.GEPA_MAX_METRIC_CALLS or config.GEPA_AUTO}")
+    gen_lm = generation_lm()
+    reflection_lm = make_lm(config.REFLECTION_MODEL, temperature=1.0, max_tokens=16000)
+    judge_start = next(_judge_calls)
+    timings = {}
+
+    with dspy.context(lm=gen_lm):
         gepa = dspy.GEPA(
             metric=metric,
             auto=None if config.GEPA_MAX_METRIC_CALLS else config.GEPA_AUTO,
             max_metric_calls=config.GEPA_MAX_METRIC_CALLS,
-            reflection_lm=make_lm(config.REFLECTION_MODEL, temperature=1.0, max_tokens=16000),
+            reflection_lm=reflection_lm,
             num_threads=8,
             track_stats=False,
             seed=seed,
         )
-        candidate = gepa.compile(base.deepcopy(), trainset=trainset)
+        started = time.monotonic()
+        candidate = gepa.compile(base.deepcopy(), trainset=trainset, valset=valset)
+        timings["gepa_s"] = round(time.monotonic() - started, 1)
+        _log(f"GEPA done in {timings['gepa_s']}s")
+
+        started = time.monotonic()
         base_score = score(base, testset)
         candidate_score = score(candidate, testset)
+        timings["compare_s"] = round(time.monotonic() - started, 1)
+        _log(f"comparison done in {timings['compare_s']}s: base={base_score:.3f} candidate={candidate_score:.3f}")
+
+    # LM history includes cache hits, so these are upper bounds on paid calls.
+    timings["generation_calls"] = len(gen_lm.history)
+    timings["reflection_calls"] = len(reflection_lm.history)
+    timings["judge_calls"] = next(_judge_calls) - judge_start - 1
+    _log(f"calls: {timings}")
 
     return {
         "status": "evaluated",
@@ -110,5 +146,7 @@ def run(base: EmailProgram, rows: list[dict], seed: int) -> dict:
         "candidate_score": candidate_score,
         "instructions": instructions(candidate),
         "n_train": len(trainset),
+        "n_val": len(valset),
         "n_test": len(testset),
+        "timings": timings,
     }
