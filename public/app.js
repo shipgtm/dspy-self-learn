@@ -327,6 +327,107 @@ function fallbackDiff(a, b) {
   return `<div class="diff-fallback"><pre>${left}</pre><pre>${right}</pre></div>`;
 }
 
+// --- diagram ----------------------------------------------------------------
+
+// Short model names for node labels: "deepseek/deepseek-v4.1-flash-1017" -> "deepseek-v4.1-flash-1017".
+const shortModel = (id) => (id || "").split("/").pop();
+
+function svgBox(x, y, w, h, title, lines = [], cls = "") {
+  const text = lines
+    .map((line, i) => `<text class="dg-line" x="${x + 14}" y="${y + 46 + i * 17}">${esc(line)}</text>`)
+    .join("");
+  return `<g class="dg-node ${cls}">
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>
+    <text class="dg-title" x="${x + 14}" y="${y + 25}">${esc(title)}</text>${text}
+  </g>`;
+}
+
+function svgDiamond(cx, cy, w, h, label) {
+  const pts = `${cx},${cy - h / 2} ${cx + w / 2},${cy} ${cx},${cy + h / 2} ${cx - w / 2},${cy}`;
+  return `<g class="dg-node dg-decision">
+    <polygon points="${pts}"/>
+    <text class="dg-title" x="${cx}" y="${cy + 5}" text-anchor="middle">${esc(label)}</text>
+  </g>`;
+}
+
+function svgArrow(d, label, lx, ly, anchor = "start", cls = "") {
+  const text = label
+    ? `<text class="dg-label" x="${lx}" y="${ly}" text-anchor="${anchor}">${esc(label)}</text>`
+    : "";
+  return `<path class="dg-arrow ${cls}" d="${d}" marker-end="url(#dg-head)"/>${text}`;
+}
+
+function renderDiagram() {
+  const s = state.stats;
+  const c = state.contacts;
+  const done = c.filter((x) => x.status !== "pending").length;
+  const every = s.optimize_every;
+  const v = s.active_version;
+  const latest = state.optimizations[0];
+  const latestLine = latest?.result?.scores
+    ? `last: ${latest.status} ${fmt(latest.result.scores.base)}→${fmt(latest.result.scores.candidate)}`
+    : "no optimization yet";
+  const count = (status) => c.filter((x) => x.status === status).length;
+
+  const svg = `
+  <svg class="diagram" viewBox="0 0 1120 680" role="img" aria-label="How emails are generated, judged and used to optimize the prompt">
+    <defs>
+      <marker id="dg-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path class="dg-head" d="M0,0 L10,5 L0,10 z"/>
+      </marker>
+    </defs>
+
+    <text class="dg-lane" x="20" y="34">EMAIL WORKFLOW · ONE RUN PER CONTACT</text>
+    ${svgBox(20, 60, 150, 96, "New contact", ["POST /api/contacts", `${c.length} received`])}
+    ${svgBox(200, 60, 160, 96, "Load prompt", [`active: v${v}`, "pinned for the run"], "dg-live")}
+    ${svgBox(390, 60, 200, 96, "Generate email", [shortModel(s.generation_model), "DSPy program"])}
+    ${svgBox(615, 60, 160, 96, "Judge with Jev", ["7 rubric questions", "logs every attempt"])}
+    ${svgDiamond(855, 108, 110, 84, "Pass?")}
+    ${svgBox(950, 40, 150, 62, "Send", [`${count("sent")} sent`], "dg-good")}
+    ${svgBox(950, 122, 150, 62, "Flag", [`${count("flagged")} flagged`], "dg-bad")}
+    ${svgArrow("M170,108 H198")}
+    ${svgArrow("M360,108 H388")}
+    ${svgArrow("M590,108 H613")}
+    ${svgArrow("M775,108 H798")}
+    ${svgArrow("M910,98 H928 V71 H948", "yes", 922, 86, "end")}
+    ${svgArrow("M910,118 H928 V153 H948", `no ×${s.max_attempts}`, 878, 172)}
+    ${svgArrow("M855,150 V200 H490 V158", `no → retry with Jev's feedback (up to ${s.max_attempts} attempts)`, 672, 218, "middle", "dg-loop")}
+    <text class="dg-note" x="855" y="44" text-anchor="middle">avg ≥ ${fmt(s.pass_threshold)}, each ≥ ${fmt(s.criterion_floor)}</text>
+
+    ${svgArrow("M1025,184 V258", "+1 completion", 1035, 228)}
+    <g class="dg-node dg-store">
+      <rect x="20" y="260" width="1080" height="64" rx="4"/>
+      <text class="dg-title" x="34" y="286">Postgres</text>
+      <text class="dg-line" x="34" y="308">contacts · attempts (JSONB) · completions counter · prompt versions · optimization runs</text>
+    </g>
+
+    <text class="dg-lane" x="1100" y="374" text-anchor="end">OPTIMIZATION WORKFLOW · EVERY ${every} COMPLETIONS</text>
+    ${svgArrow("M95,324 V398", `${every}th`, 105, 366)}
+    ${svgArrow("M280,324 V398", "read", 290, 366)}
+    ${svgBox(20, 400, 150, 96, `Every ${every}th`, [`${done} completed`, `next in ${every - (done % every)}`], "dg-live")}
+    ${svgBox(200, 400, 160, 96, "Collect data", ["first attempts", "recent + history"])}
+    ${svgBox(390, 400, 150, 96, "Split contacts", ["train / val / test", `val ≤ ${s.gepa_valset_size}`])}
+    ${svgBox(570, 400, 210, 96, "GEPA", ["generate → Jev → read", "feedback → rewrite prompt", `cap: ${s.gepa_max_metric_calls ?? "auto"} scored emails`])}
+    ${svgBox(810, 400, 150, 96, "Compare", ["current vs new", "on held-out test"])}
+    ${svgDiamond(1040, 448, 110, 84, "Better?")}
+    ${svgArrow("M170,448 H198")}
+    ${svgArrow("M360,448 H388")}
+    ${svgArrow("M540,448 H568")}
+    ${svgArrow("M780,448 H808")}
+    ${svgArrow("M960,448 H983")}
+    <text class="dg-note" x="1030" y="514" text-anchor="end">by ≥ ${fmt(s.min_improvement)} · else keep v${v}</text>
+    ${svgArrow("M1040,490 V538", "yes", 1050, 520)}
+    ${svgBox(880, 540, 220, 80, `Activate v${v + 1}`, ["save prompt + version row", latestLine], "dg-good")}
+
+    ${svgArrow("M990,620 V650 H8 V48 H340 V58", "", 0, 0, "start", "dg-loop")}
+    <text class="dg-label" x="560" y="668" text-anchor="middle">new runs load the newest prompt · runs already in progress keep theirs</text>
+  </svg>`;
+
+  $("#panel-diagram").innerHTML = `
+    <p class="note">Live view of the system. Numbers update with the dashboard.</p>
+    <div class="diagram-wrap">${svg}</div>`;
+}
+
 // --- shell ------------------------------------------------------------------
 
 function render() {
@@ -335,6 +436,7 @@ function render() {
   renderContacts();
   renderFailed();
   renderOptimizations();
+  renderDiagram();
 }
 
 function selectTab(tab) {
@@ -360,7 +462,7 @@ document.addEventListener("click", (e) => {
   }
 });
 
-const TABS = ["contacts", "failed", "optimizations"];
+const TABS = ["contacts", "failed", "optimizations", "diagram"];
 const tabFromHash = () => (TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "contacts");
 window.addEventListener("hashchange", () => selectTab(tabFromHash()));
 selectTab(tabFromHash());

@@ -315,6 +315,25 @@ main { padding: 24px 32px 64px; }
   --diffs-deletion-color-override: var(--red);
 }
 
+/* --- Diagram ------------------------------------------------------------ */
+
+.diagram-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 16px; }
+.diagram { display: block; width: 100%; min-width: 880px; height: auto; font-family: var(--mono); }
+.dg-node rect, .dg-node polygon { fill: var(--paper); stroke: var(--line-strong); stroke-width: 1; }
+.dg-node.dg-live rect { stroke: var(--blue); }
+.dg-node.dg-good rect { stroke: var(--ink); stroke-width: 1.5; }
+.dg-node.dg-bad rect { stroke: var(--red); fill: var(--red-soft); }
+.dg-node.dg-store rect { fill: var(--surface-2); stroke: var(--ink); }
+.dg-decision polygon { fill: var(--surface-2); }
+.dg-title { fill: var(--ink); font-size: 13px; font-weight: 500; }
+.dg-line { fill: var(--muted); font-size: 11.5px; }
+.dg-lane { fill: var(--muted); font-size: 11px; letter-spacing: 0.06em; }
+.dg-label { fill: var(--muted); font-size: 11px; }
+.dg-note { fill: var(--muted); font-size: 10.5px; }
+.dg-arrow { fill: none; stroke: var(--muted); stroke-width: 1.25; }
+.dg-arrow.dg-loop { stroke: var(--blue); stroke-dasharray: 4 3; }
+.dg-head { fill: var(--muted); }
+
 /* --- Small screens ------------------------------------------------------- */
 
 @media (max-width: 900px) {

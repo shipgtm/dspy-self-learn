@@ -75,4 +75,11 @@ async def stats() -> dict:
         "pass_threshold": config.PASS_THRESHOLD,
         "criterion_floor": config.CRITERION_FLOOR,
         "optimize_every": config.OPTIMIZE_EVERY,
+        "max_attempts": config.MAX_ATTEMPTS,
+        "min_improvement": config.MIN_IMPROVEMENT,
+        "gepa_max_metric_calls": config.GEPA_MAX_METRIC_CALLS,
+        "gepa_valset_size": config.GEPA_VALSET_SIZE,
+        "generation_model": config.GENERATION_MODEL,
+        "reflection_model": config.REFLECTION_MODEL,
+        "judge_model": config.JUDGE_MODEL,
     }
