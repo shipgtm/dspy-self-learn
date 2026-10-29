@@ -83,23 +83,12 @@ async function refresh() {
 // --- stats ------------------------------------------------------------------
 
 function renderStats() {
-  const c = state.contacts;
-  const done = c.filter((x) => x.status !== "pending" && x.attempts.length);
-  const firstPass = done.filter((x) => x.attempts[0].passed).length;
-  const values = {
-    total: c.length,
-    sent: c.filter((x) => x.status === "sent").length,
-    flagged: c.filter((x) => x.status === "flagged").length,
-    pending: c.filter((x) => x.status === "pending").length,
-    first_pass: done.length ? pct(firstPass / done.length) : "–",
-    active_version: `v${state.stats.active_version}`,
-    optimize_every: state.stats.optimize_every,
-  };
-  for (const el of document.querySelectorAll("[data-stat]")) {
-    el.textContent = values[el.dataset.stat] ?? "–";
+  for (const el of document.querySelectorAll('[data-stat="optimize_every"]')) {
+    el.textContent = state.stats.optimize_every;
   }
-  $('[data-count="contacts"]').textContent = c.length || "";
-  $('[data-count="failed"]').textContent = values.flagged || "";
+  const flagged = state.contacts.filter((x) => x.status === "flagged").length;
+  $('[data-count="contacts"]').textContent = state.contacts.length || "";
+  $('[data-count="failed"]').textContent = flagged || "";
   $('[data-count="optimizations"]').textContent = state.optimizations.length || "";
 }
 
